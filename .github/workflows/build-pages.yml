@@ -1,4 +1,6 @@
 name: Build PDF index and pages
+permissions:
+  contents: write
 on:
   push:
     branches: [ main ]
@@ -22,8 +24,9 @@ jobs:
       - name: Commit generated files
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pdfs/index.html $(find . -maxdepth 2 -type f -path "./*/index.html" -not -path "./.github/*") || true
-          git commit -m "Auto-generate PDF index and per-file pages" || echo "no changes to commit"
-          git push origin HEAD:main
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pdfs/index.html || true
+          git add */index.html || true
+          git commit -m "Auto-generate PDF index and pages" || echo "no changes to commit"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
 
