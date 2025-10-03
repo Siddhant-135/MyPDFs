@@ -3,16 +3,12 @@ set -euo pipefail
 
 # Configuration
 PDF_DIR="pdfs"           # where you put your PDFs
-ROOT_INDEX="index.html"  # optional root index (kept minimal)
 PDFS_INDEX="$PDF_DIR/index.html"
-SLUG_DIR_PREFIX=""       # leave blank; will create <slug>/index.html
 
 # Helper: slugify filename (strip extension, replace spaces with -, remove unsafe chars)
 slugify() {
   local name="$1"
-  # remove extension
   name="${name%.*}"
-  # lowercase, replace spaces and %20 with -, remove characters except alnum-_
   local s
   s="$(echo "$name" | iconv -t ascii//TRANSLIT 2>/dev/null || echo "$name")"
   s="$(echo "$s" | tr '[:upper:]' '[:lower:]')"
@@ -48,26 +44,26 @@ cat > "$PDFS_INDEX" <<'HTMLHEAD'
   <div class="list">
 HTMLHEAD
 
-# For each PDF create a slug directory with index.html (pretty page), and add entry to pdfs/index.html
+# Iterate PDFs and create per-slug pages
 shopt -s nullglob
 for f in "$PDF_DIR"/*.pdf; do
   filename="$(basename "$f")"
   slug="$(slugify "$filename")"
-  slug_dir="$SLUG_DIR_PREFIX$slug"
-  pdf_rel_path="./$PDF_DIR/$filename"   # relative from root; used where appropriate
+  slug_dir="$slug"                      # create folder at repo root: /<slug>/index.html
+  pdf_rel_path="./$PDF_DIR/$filename"   # relative link to PDF
+
   mkdir -p "$slug_dir"
 
-  # Add link to PDF listing page (pdfs/index.html) — link to pretty landing: /<slug>/
+  # Add entry to pdfs/index.html
   echo "  <div><a href=\"/$slug/\">$filename</a> <a class=\"meta\" href=\"$pdf_rel_path\">(raw pdf)</a></div>" >> "$PDFS_INDEX"
 
-  # Create pretty landing page for this PDF at <slug>/index.html using the user's UI
-  # pdfPath must be relative to the slug folder: '../pdfs/<filename>.pdf'
-  cat > "$slug_dir/index.html" <<HTMLPAGE
+  # Create pretty landing page for this PDF using a quoted heredoc (no shell expansions inside)
+  cat > "$slug_dir/index.html" <<'HTMLPAGE'
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>$filename</title>
+  <title>__FILENAME__</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
@@ -80,30 +76,16 @@ for f in "$PDF_DIR"/*.pdf; do
       --radius: 12px;
     }
     html, body { height: 100%; margin: 0; background: #111; color: #eee; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-    /* PDF area */
     #pdfWrap { position: fixed; inset: 0; }
     #pdfObject, #pdfEmbed { width: 100%; height: 100%; border: 0; background:#1a1a1a; display:block; }
-    /* Last updated chip */
-    .chip {
-      position: fixed; top: 14px; right: 14px; background: var(--chip-bg); color: var(--chip-fg);
-      padding: 8px 12px; border-radius: 999px; font-size: 12px; line-height: 1;
-      box-shadow: var(--shadow); opacity: 0; transform: translateY(-6px);
-      transition: opacity .6s ease, transform .6s ease; z-index: 5; white-space: nowrap;
-      pointer-events:auto;
-    }
+    .chip { position: fixed; top: 14px; right: 14px; background: var(--chip-bg); color: var(--chip-fg); padding: 8px 12px; border-radius: 999px; font-size: 12px; line-height: 1; box-shadow: var(--shadow); opacity: 0; transform: translateY(-6px); transition: opacity .6s ease, transform .6s ease; z-index: 5; white-space: nowrap; pointer-events:auto; }
     .chip.show { opacity: 1; transform: translateY(0); }
     .chip.vanish { opacity: 0; transform: translateY(-6px); }
-    /* Action buttons */
     .fab { position: fixed; right: 14px; bottom: 14px; display: flex; gap: 10px; z-index: 5; }
-    .btn {
-      border: none; border-radius: var(--radius); background: var(--btn-bg); color: var(--btn-fg);
-      padding: 10px 14px; font-size: 14px; display: inline-flex; align-items: center; gap: 8px;
-      cursor: pointer; box-shadow: var(--shadow); text-decoration: none; transition: background .2s ease, transform .05s ease;
-    }
+    .btn { border: none; border-radius: var(--radius); background: var(--btn-bg); color: var(--btn-fg); padding: 10px 14px; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: var(--shadow); text-decoration: none; transition: background .2s ease, transform .05s ease; }
     .btn:hover { background: var(--btn-bg-hover); }
     .btn:active { transform: translateY(1px); }
     .btn svg { width: 16px; height: 16px; }
-    /* Fallback */
     .fallback { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 32px; }
     .hidden { display: none !important; }
     @media print { .chip, .fab { display: none !important; } body { background:#fff; } }
@@ -111,10 +93,8 @@ for f in "$PDF_DIR"/*.pdf; do
 </head>
 <body>
   <div id="pdfWrap">
-    <!-- Prefer <object> for Safari; <embed> as nested fallback -->
     <object id="pdfObject" type="application/pdf" data="">
-      <embed id="pdfEmbed" type="application/pdf" src="">
-      </embed>
+      <embed id="pdfEmbed" type="application/pdf" src=""></embed>
     </object>
   </div>
 
@@ -122,19 +102,11 @@ for f in "$PDF_DIR"/*.pdf; do
 
   <div class="fab">
     <a id="downloadBtn" class="btn" download>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <path d="M7 10l5 5 5-5"/>
-        <path d="M12 15V3"/>
-      </svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
       Download
     </a>
     <button id="printBtn" class="btn" type="button">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M6 9V2h12v7"/>
-        <path d="M6 18H4a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"/>
-        <path d="M6 14h12v8H6z"/>
-      </svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
       Print
     </button>
   </div>
@@ -148,8 +120,9 @@ for f in "$PDF_DIR"/*.pdf; do
 
   <script>
     (async function () {
-      const filename = ${JSON.stringify("$filename")};
-      const pdfPath = '../$PDF_DIR/$filename';
+      // placeholders will be replaced by the generator script with real values
+      const filename = "__FILENAME__";
+      const pdfPath = "__PDF_REL_PATH__";    // e.g. ../pdfs/My File.pdf
       const pdfWithView = pdfPath + '#toolbar=0&navpanes=0&view=FitH';
 
       const pdfObject = document.getElementById('pdfObject');
@@ -166,14 +139,10 @@ for f in "$PDF_DIR"/*.pdf; do
       downloadBtn.href = pdfPath;
       fallbackLink.href = pdfPath;
 
-      // Vanishing chip helpers
       const fmtDate = (iso) => {
         try {
           const d = new Date(iso);
-          return d.toLocaleString(undefined, {
-            year: 'numeric', month: 'short', day: '2-digit',
-            hour: '2-digit', minute: '2-digit'
-          });
+          return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         } catch { return iso; }
       };
       const showChip = (text) => {
@@ -184,35 +153,30 @@ for f in "$PDF_DIR"/*.pdf; do
         chip.addEventListener('mouseleave', () => { t = setTimeout(() => chip.classList.add('vanish'), 2000); });
       };
 
-      // Print (will print the embedded PDF on most browsers)
       printBtn.addEventListener('click', () => window.print());
 
-      // Best-effort inline support detection: if not loaded within 3s, show fallback
       let loaded = false;
       const timer = setTimeout(() => { if (!loaded) fallback.classList.remove('hidden'); }, 3000);
-      // We don’t always get a 'load' on <object>. Add a small fetch HEAD fallback to confirm availability.
       try {
         const r = await fetch(pdfPath, { method: 'HEAD' });
         if (!r.ok) throw new Error();
         loaded = true; clearTimeout(timer);
-      } catch {
-        // Fallback will show after timer
-      }
+      } catch {}
 
-      // Show last updated using GitHub commits API for this file
+      // Use encodeURIComponent to build a safe commits query
       try {
-        const host = location.host; // "<username>.github.io"
+        const host = location.host;
         const owner = host.endsWith('.github.io') ? host.split('.github.io')[0] : host.split(':')[0];
         const pathParts = location.pathname.split('/').filter(Boolean);
-        // repo should be first path part (e.g. /MyPDFs/<slug>/)
         const repo = pathParts[0] || 'MyPDFs';
-        const commitsURL = \`https://api.github.com/repos/\${owner}/\${repo}/commits?path=$PDF_DIR/\${filename}&per_page=1\`;
+        // we encode the pdfPath when adding to query
+        const commitsURL = `https://api.github.com/repos/${owner}/${repo}/commits?path=${encodeURIComponent(pdfPath)}&per_page=1`;
         const res = await fetch(commitsURL, { headers: { 'Accept': 'application/vnd.github+json' }});
         if (!res.ok) throw new Error('commit fetch failed');
         const data = await res.json();
         const c = Array.isArray(data) && data[0];
         const iso = c?.commit?.author?.date || null;
-        showChip(iso ? \`Last updated • \${fmtDate(iso)}\` : 'Last updated • unknown');
+        showChip(iso ? `Last updated • ${fmtDate(iso)}` : 'Last updated • unknown');
       } catch {
         showChip('Last updated • unavailable');
       }
@@ -221,6 +185,14 @@ for f in "$PDF_DIR"/*.pdf; do
 </body>
 </html>
 HTMLPAGE
+
+  # Now replace placeholders safely: __FILENAME__, __PDF_REL_PATH__
+  # escape slashes & ampersands for sed safety
+  escaped_filename=$(printf '%s' "$filename" | sed -e 's/[\/&]/\\&/g' -e 's/"/\\"/g')
+  escaped_pdfrel=$(printf '%s' "$pdf_rel_path" | sed -e 's/[\/&]/\\&/g' -e 's/"/\\"/g')
+
+  sed -i "s/__FILENAME__/${escaped_filename}/g" "$slug_dir/index.html"
+  sed -i "s/__PDF_REL_PATH__/${escaped_pdfrel}/g" "$slug_dir/index.html"
 
 done
 shopt -u nullglob
